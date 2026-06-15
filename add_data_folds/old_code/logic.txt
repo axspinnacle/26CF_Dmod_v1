@@ -1,0 +1,17 @@
+Logic for code 
+H:\Carfax Symbols\code\Create_splitdata_Superpolicy_objectivefunction.ipynb
+1)	Open “superpolicy_final.sas7bdat” . 
+a.	 This file has the superpolicy_id based on the logic Gary wrote in SAS 
+i.	Where is that file (store for completion) 
+2)	Read “necessary columns” from step 18 feather file since there will be memory issue otherwise. 
+a.	“necessary columns” = columns needed for objective function, VIN, Date
+b.	Merge this data with “superpolicy_final.sas7bdat” using VIN-Date 
+i.	Confirm the number of extra rows after the merge
+1.	Ideally there wont be any extra rows 
+3)	Loop to find ideal fits run 100 simulation. 
+a.	For each loop get the 24D vector 
+b.	Calculate the Objective function. 
+c.	If the error is less than SD, then proceed in the loop
+d.	Store following loop, seed, Objective function, time taken for each loop 
+4)	Plot Loop vs Objective function. 
+a.	Choose lowest Objective function ? 

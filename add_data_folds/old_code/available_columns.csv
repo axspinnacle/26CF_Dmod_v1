@@ -1,0 +1,22 @@
+file: /Users/Mach/dev/aps/data/2026_Dmodel_data/master_dataset_car.parquet
+column_name
+vin_date
+policyid
+ee_bi_imps
+ee_pd_imps
+ee_pip_imps
+ee_med_imps
+ee_coll_imp_imps
+ee_comp_imps
+incurred_raw_bi_imps
+incurred_raw_pd_imps
+incurred_raw_pip_imps
+incurred_raw_med_cal_imps
+incurred_raw_coll_imps
+incurred_raw_comp_imps
+
+file:/Users/Mach/dev/aps/data/2026_Dmodel_data/superpolicy/superpolicy_car.parquet
+vin_date
+superpolicy_id
+
+outputfile: /Users/Mach/dev/aps/data/2026_Dmodel_data/fold_superpolicy/car_master_dataset_fold_sp.parquet

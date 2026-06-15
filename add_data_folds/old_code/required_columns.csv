@@ -1,0 +1,16 @@
+column_name,data_type,category,description,required
+VIN,string,identifier,Vehicle Identification Number (used to create VIN_Date join key),yes
+Date,datetime,identifier,Policy date (used to create VIN_Date join key),yes
+superpolicy_id,integer,identifier,Groups records that must stay together in the same fold (prevents data leakage),yes
+ee_bi,float,earned_exposure,Earned Exposure - Bodily Injury,yes
+ee_pd,float,earned_exposure,Earned Exposure - Property Damage,yes
+ee_pip,float,earned_exposure,Earned Exposure - Personal Injury Protection,yes
+ee_med,float,earned_exposure,Earned Exposure - Medical,yes
+ee_coll,float,earned_exposure,Earned Exposure - Collision,yes
+ee_comp,float,earned_exposure,Earned Exposure - Comprehensive,yes
+incurred_raw_bi,float,incurred_loss,Incurred Loss - Bodily Injury,yes
+incurred_raw_pd,float,incurred_loss,Incurred Loss - Property Damage,yes
+incurred_raw_pip,float,incurred_loss,Incurred Loss - Personal Injury Protection,yes
+incurred_raw_med,float,incurred_loss,Incurred Loss - Medical,yes
+incurred_raw_coll,float,incurred_loss,Incurred Loss - Collision,yes
+incurred_raw_comp,float,incurred_loss,Incurred Loss - Comprehensive,yes

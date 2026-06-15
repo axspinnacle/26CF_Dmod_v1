@@ -1,0 +1,15 @@
+column_name
+vin_date
+policyid
+ee_bi_imps
+ee_pd_imps
+ee_pip_imps
+ee_med_imps
+ee_coll_imp_imps
+ee_comp_imps
+incurred_raw_bi_imps
+incurred_raw_pd_imps
+incurred_raw_pip_imps
+incurred_raw_med_cal_imps
+incurred_raw_coll_imps
+incurred_raw_comp_imps
