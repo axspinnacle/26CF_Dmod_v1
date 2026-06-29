@@ -1,0 +1,7 @@
+{
+    "data_paths": {
+        "fold_parquet": "/Users/Mach/dev/aps/data/2026_Dmodel_data/fold_superpolicy/car_master_dataset_10fold_sp.parquet",
+        "car_with_dep_factor": "/Users/Mach/dev/aps/data/2026_Dmodel_data/car_with_dep_factor.parquet",
+        "output_joined": "/Users/Mach/dev/aps/data/2026_Dmodel_data/car_with_dep_factor_fold.parquet"
+    }
+}

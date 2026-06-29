@@ -1,0 +1,9 @@
+{
+    "model_year": 2025,
+    "car_parquet_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/master_dataset_car.parquet",
+    "vin_bsst_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/VIN_BSST.parquet",
+    "BSST_GLM_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/BSST_json",
+    "default_odometer_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/Dep_Model_Default_Odometer.csv",
+    "default_state_by_bsst_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/Dep_Model_Default_State_by_BSST.csv",
+    "default_pop_density_percentile": 50
+}
