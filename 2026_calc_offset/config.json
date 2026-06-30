@@ -5,5 +5,7 @@
     "BSST_GLM_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/BSST_json",
     "default_odometer_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/Dep_Model_Default_Odometer.csv",
     "default_state_by_bsst_path": "/Users/Mach/dev/aps/data/2026_Dmodel_data/Dep_Model_Default_State_by_BSST.csv",
-    "default_pop_density_percentile": 50
+    "car_with_dep_factor": "/Users/Mach/dev/aps/data/2026_Dmodel_data/car_with_dep_factor.parquet",
+    "default_pop_density_percentile": 50,
+    "debug_folder": "/Users/Mach/dev/aps/data/2026_Dmodel_data/debug"
 }
