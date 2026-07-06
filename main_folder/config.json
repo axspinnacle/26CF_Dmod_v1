@@ -1,0 +1,116 @@
+{
+    "global": {
+        "model_year": 2026,
+        "base_data_dir": "/Users/Mach/dev/aps/data/2026_Dmodel_data"
+    },
+
+    "calc_offset": {
+        "files": {
+            "car_parquet": "master_dataset_car.parquet",
+            "vin_bsst": "VIN_BSST.parquet",
+            "bsst_glm_folder": "BSST_json",
+            "default_odometer": "Dep_Model_Default_Odometer.csv",
+            "default_state_by_bsst": "Dep_Model_Default_State_by_BSST.csv",
+            "zip_geodensity": "geo_2017_2023_20260128.csv",
+            "output": "car_with_dep_factor.parquet",
+            "debug_folder": "debug"
+        },
+        "input_columns": [
+            "cef_est_curr_mi_grp_imps",
+            "dml_year_imps",
+            "vc_msrp_impa",
+            "st_raw",
+            "insstate",
+            "dml_make_raw",
+            "vin",
+            "vin_date",
+            "zip"
+        ],
+        "vin_bsst_columns": ["VIN", "BODY_STYLE_SEGMENT_BODY_TYPE"],
+        "output_columns": [
+            "vin_date",
+            "vin",
+            "BODY_STYLE_SEGMENT_BODY_TYPE",
+            "cef_est_curr_mi_grp_imps",
+            "ODOMETER_IMP_FLAG",
+            "geo_pop_density_ntile",
+            "POP_DENSITY_IMP_FLAG",
+            "CALC_VEH_AGE",
+            "st_raw",
+            "vc_msrp_impa",
+            "Dep_factor",
+            "veh_value_dep"
+        ],
+        "default_pop_density_percentile": 50,
+        "max_age_for_odometer_lookup": 25,
+        "dep_factor_warning_threshold": 1.3
+    },
+
+    "add_superpolicy": {
+        "files": {
+            "input": "master_dataset_car.parquet",
+            "output": "superpolicy/superpolicy_car.parquet"
+        },
+        "input_columns": ["vin", "vin_date", "policyid"],
+        "max_iterations": 14
+    },
+
+    "add_fold": {
+        "files": {
+            "main_data": "master_dataset_car.parquet",
+            "superpolicy": "superpolicy/superpolicy_car.parquet",
+            "output": "fold_superpolicy/car_master_dataset_10fold_sp.parquet",
+            "simulation_results": "fold_superpolicy/simulation_results_10fold.csv"
+        },
+        "join_key": "vin_date",
+        "superpolicy_col": "superpolicy_id",
+        "n_folds": 10,
+        "n_simulations": 300,
+        "use_raw_ee": false,
+        "use_raw_incurred": false,
+        "ee_columns_imps": {
+            "bi": "ee_bi_imps",
+            "pd": "ee_pd_imps",
+            "pip": "ee_pip_imps",
+            "med": "ee_med_imps",
+            "coll": "ee_coll_imp_imps",
+            "comp": "ee_comp_imps"
+        },
+        "ee_columns_raw": {
+            "bi": "ee_bi_raw",
+            "pd": "ee_pd_raw",
+            "pip": "ee_pip_raw",
+            "med": "ee_med_raw",
+            "coll": "ee_coll_imps",
+            "comp": "ee_comp_raw"
+        },
+        "incurred_columns_imps": {
+            "bi": "incurred_raw_bi_imps",
+            "pd": "incurred_raw_pd_imps",
+            "pip": "incurred_raw_pip_imps",
+            "med": "incurred_raw_med_cal_imps",
+            "coll": "incurred_raw_coll_imps",
+            "comp": "incurred_raw_comp_imps"
+        },
+        "incurred_columns_raw": {
+            "bi": "incurred_raw_bi_raw",
+            "pd": "incurred_raw_pd_raw",
+            "pip": "incurred_raw_pip_raw",
+            "med": "incurred_raw_med_raw",
+            "coll": "incurred_raw_coll_raw",
+            "comp": "incurred_raw_comp_raw"
+        },
+        "all_coverages": ["bi", "pd", "pip", "med", "coll", "comp"],
+        "analysis_coverages": ["bi", "pd", "pip", "coll", "comp"],
+        "objective_coverages": ["bi", "pd", "pip", "coll", "comp"]
+    },
+
+    "combine_data": {
+        "files": {
+            "fold_parquet": "fold_superpolicy/car_master_dataset_10fold_sp.parquet",
+            "dep_factor_parquet": "car_with_dep_factor.parquet",
+            "output": "car_with_dep_factor_fold.parquet"
+        },
+        "join_key": "vin_date"
+    }
+}
