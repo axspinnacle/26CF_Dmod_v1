@@ -1,5 +1,9 @@
 import os
+import sys
 import polars as pl
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared"))
+from io_utils import describe_path, resolve_polars_source
 
 
 class SuperpolicyProcessor:
@@ -14,8 +18,11 @@ class SuperpolicyProcessor:
 
     def load_data(self):
         input_path = self._path("input")
+        describe_path(input_path)
+        source = resolve_polars_source(input_path)
+
         cols = self.cfg["input_columns"]
-        self.df = pl.scan_parquet(input_path).select(cols).collect()
+        self.df = pl.scan_parquet(source).select(cols).collect()
         print(f"Loaded {self.df.shape[0]:,} rows")
 
     def consolidate(self):

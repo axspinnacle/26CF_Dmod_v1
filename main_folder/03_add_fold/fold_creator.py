@@ -1,8 +1,12 @@
 import os
+import sys
 import random
 import time
 import pandas as pd
 import numpy as np
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared"))
+from io_utils import describe_path
 
 
 class FoldCreator:
@@ -34,14 +38,17 @@ class FoldCreator:
 
     def load_and_merge_data(self):
         main_path = self._path("main_data")
+        describe_path(main_path)
         ee_cols = list(self.ee_columns.values())
         inc_cols = list(self.incurred_columns.values())
         columns_to_load = [self.join_key] + ee_cols + inc_cols
 
+        # pandas read_parquet natively supports a directory of part-files.
         df_main = pd.read_parquet(main_path, columns=columns_to_load)
         print(f"Main data shape: {df_main.shape}")
 
         sp_path = self._path("superpolicy")
+        describe_path(sp_path)
         df_sp = pd.read_parquet(sp_path)
         print(f"Superpolicy data shape: {df_sp.shape}")
 

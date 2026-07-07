@@ -1,6 +1,10 @@
 import os
+import sys
 import json
 import pandas as pd
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared"))
+from io_utils import describe_path
 
 
 class OffsetCalculator:
@@ -17,7 +21,11 @@ class OffsetCalculator:
 
     def load_data(self):
         cols = self.cfg["input_columns"]
-        self.df = pd.read_parquet(self._path("car_parquet"), columns=cols)
+        car_path = self._path("car_parquet")
+        describe_path(car_path)
+        # pandas read_parquet natively supports a directory of part-files,
+        # so no special handling needed beyond the diagnostic above.
+        self.df = pd.read_parquet(car_path, columns=cols)
 
         count_before = len(self.df)
         self.df = self.df[self.df["dml_year_imps"] != -999]

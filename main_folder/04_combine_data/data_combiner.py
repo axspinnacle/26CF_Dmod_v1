@@ -1,5 +1,9 @@
 import os
+import sys
 import pandas as pd
+
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "shared"))
+from io_utils import describe_path
 
 
 class DataCombiner:
@@ -18,10 +22,12 @@ class DataCombiner:
 
     def load_data(self):
         fold_path = self._path("fold_parquet")
+        describe_path(fold_path)
         self.df_fold = pd.read_parquet(fold_path)
         print(f"Fold data shape: {self.df_fold.shape}")
 
         dep_path = self._path("dep_factor_parquet")
+        describe_path(dep_path)
         self.df_dep = pd.read_parquet(dep_path)
         print(f"Dep factor data shape: {self.df_dep.shape}")
 
