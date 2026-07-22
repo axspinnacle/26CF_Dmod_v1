@@ -1,0 +1,16 @@
+{
+    "global": 
+    {
+        "model_year": 2026,
+        "base_data_dir": "/Users/Mach/dev/aps/data/2026_Dmodel_data",
+        "master_data": "master_dataset_car.parquet",
+        "aux_data_car_dep_fold": "car_with_dep_factor_fold.parquet"
+    },
+    "preprocess":
+    {
+        "joinkey": "vin_date",
+        "combined_output": "master_aux_combined.parquet",
+        "quality_report_dir": "data_quality_reports",
+        "quality_report_file": "quality_report.csv"
+    }
+}
