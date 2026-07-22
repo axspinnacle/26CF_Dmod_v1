@@ -1,0 +1,9 @@
+{
+  "rmse": 1318.913473,
+  "mae": 49.683784,
+  "r2": 0.807381,
+  "training_time_sec": 21.1,
+  "n_train": 9503,
+  "n_test": 1907,
+  "n_features": 528
+}

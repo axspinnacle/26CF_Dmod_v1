@@ -1,0 +1,4 @@
+experiment_name,model_power,fit_quality,rmse
+type3_actuarial,1.862553,0.097669,1318.913473
+type1_ordinal,1.860187,0.097919,1400.832119
+type2_binary,1.859718,0.097968,1537.981713

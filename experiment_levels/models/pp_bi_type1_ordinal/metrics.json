@@ -2,7 +2,7 @@
   "rmse": 1400.832119,
   "mae": 50.332336,
   "r2": 0.78271,
-  "training_time_sec": 317.8,
+  "training_time_sec": 321.7,
   "n_train": 9503,
   "n_test": 1907,
   "n_features": 15412
