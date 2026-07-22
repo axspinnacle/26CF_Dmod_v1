@@ -3,8 +3,18 @@ data_processing.py
 ------------------
 Functions for loading, joining, and quality-checking the master and auxiliary
 car depreciation datasets.
+
+Split-processing additions
+--------------------------
+The following functions support memory-efficient fold-based splitting:
+  - optimize_dtypes          : downcast float64→float32, int64→int32
+  - load_master_data_optimized: load master and immediately optimize dtypes
+  - load_aux_data_by_folds   : load aux filtered to a specific list of folds
+  - save_split_data          : save a split DataFrame with a named convention
+  - get_memory_usage         : report memory footprint of a DataFrame
 """
 
+import gc
 import os
 import json
 import pandas as pd
@@ -259,3 +269,185 @@ def save_quality_report(
     output_path = os.path.join(report_folder, report_filename)
     quality_df.to_csv(output_path, index=False)
     return output_path
+
+
+# ---------------------------------------------------------------------------
+# Split-Processing  (memory-efficient fold-based pipeline)
+# ---------------------------------------------------------------------------
+
+def get_memory_usage(df: pd.DataFrame) -> str:
+    """Return a human-readable string of a DataFrame's memory footprint.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame to measure.
+
+    Returns
+    -------
+    str
+        Memory usage string, e.g. ``"1.23 GB"``.
+    """
+    bytes_used = df.memory_usage(deep=True).sum()
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if bytes_used < 1024:
+            return f"{bytes_used:.2f} {unit}"
+        bytes_used /= 1024
+    return f"{bytes_used:.2f} PB"
+
+
+def optimize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
+    """Downcast numeric columns to reduce memory usage.
+
+    Conversions applied in-place on a copy of *df*:
+    - ``float64`` → ``float32``   (50 % smaller; sufficient for XGBoost)
+    - ``int64``   → ``int32``     (50 % smaller)
+
+    Non-numeric columns (strings, categories, datetimes, etc.) are left
+    unchanged.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame.
+
+    Returns
+    -------
+    pd.DataFrame
+        New DataFrame with optimized dtypes.
+    """
+    df = df.copy()
+    for col in df.columns:
+        col_dtype = df[col].dtype
+        if col_dtype == "float64":
+            df[col] = df[col].astype("float32")
+        elif col_dtype == "int64":
+            df[col] = df[col].astype("int32")
+    return df
+
+
+def load_master_data_optimized(base_dir: str, filename: str) -> pd.DataFrame:
+    """Load the master dataset and immediately optimize numeric dtypes.
+
+    This is a drop-in replacement for :func:`load_master_data` that converts
+    ``float64`` → ``float32`` and ``int64`` → ``int32`` right after loading,
+    cutting memory usage by roughly 50 % before any join takes place.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base directory where the data files reside.
+    filename : str
+        Name of the master data Parquet file.
+
+    Returns
+    -------
+    pd.DataFrame
+        Loaded and dtype-optimized master dataset.
+    """
+    path = os.path.join(base_dir, filename)
+    df = pd.read_parquet(path)
+    df = optimize_dtypes(df)
+    return df
+
+
+def load_aux_data_by_folds(
+    base_dir: str,
+    filename: str,
+    fold_list: list,
+    fold_col: str = "fold",
+) -> pd.DataFrame:
+    """Load the auxiliary dataset and keep only rows belonging to *fold_list*.
+
+    The fold column is used to filter the data **before** any join, so only
+    the relevant slice of the aux file is held in memory.  Numeric dtypes are
+    also optimized to ``float32`` / ``int32`` automatically.
+
+    Parameters
+    ----------
+    base_dir : str
+        Base directory where the data files reside.
+    filename : str
+        Name of the auxiliary data Parquet file.
+    fold_list : list of int
+        Fold numbers to retain (e.g. ``[1, 2, 3, 4, 5]`` for the training
+        split).
+    fold_col : str, optional
+        Name of the fold column in the aux dataset (default: ``"fold"``).
+
+    Returns
+    -------
+    pd.DataFrame
+        Filtered and dtype-optimized auxiliary dataset.
+
+    Raises
+    ------
+    KeyError
+        If *fold_col* is not found in the auxiliary file.
+    ValueError
+        If no rows match the requested *fold_list*.
+    """
+    path = os.path.join(base_dir, filename)
+    df = pd.read_parquet(path)
+
+    if fold_col not in df.columns:
+        raise KeyError(
+            f"Fold column '{fold_col}' not found in '{filename}'. "
+            f"Available columns: {list(df.columns)}"
+        )
+
+    df = df[df[fold_col].isin(fold_list)].reset_index(drop=True)
+
+    if df.empty:
+        raise ValueError(
+            f"No rows found for folds {fold_list} in column '{fold_col}'."
+        )
+
+    df = optimize_dtypes(df)
+    return df
+
+
+def save_split_data(
+    df: pd.DataFrame,
+    base_dir: str,
+    split_name: str,
+    quality_report_dir: str = "data_quality_reports",
+) -> tuple[str, str]:
+    """Save a split DataFrame as Parquet and its quality report as CSV.
+
+    Output file names are derived automatically from *split_name*:
+    - Parquet : ``<base_dir>/<split_name>_combined.parquet``
+    - CSV     : ``<base_dir>/<quality_report_dir>/quality_report_<split_name>.csv``
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Combined (joined) split dataset.
+    base_dir : str
+        Root data directory.
+    split_name : str
+        Short label for the split, e.g. ``"train"``, ``"test"``,
+        ``"holdout"``.
+    quality_report_dir : str, optional
+        Sub-directory (relative to *base_dir*) for quality report CSVs
+        (default: ``"data_quality_reports"``).
+
+    Returns
+    -------
+    parquet_path : str
+        Full path to the saved Parquet file.
+    report_path : str
+        Full path to the saved quality-report CSV.
+    """
+    # ── Parquet ──────────────────────────────────────────────────────────────
+    parquet_filename = f"{split_name}_combined.parquet"
+    parquet_path = save_combined_data(df, base_dir, parquet_filename)
+
+    # ── Quality report ────────────────────────────────────────────────────────
+    quality_df = check_data_quality(df)
+    report_filename = f"quality_report_{split_name}.csv"
+    report_path = save_quality_report(
+        quality_df, base_dir, quality_report_dir, report_filename
+    )
+
+    return parquet_path, report_path

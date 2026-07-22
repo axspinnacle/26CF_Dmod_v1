@@ -12,5 +12,37 @@
         "combined_output": "master_aux_combined.parquet",
         "quality_report_dir": "data_quality_reports",
         "quality_report_file": "quality_report.csv"
+    },
+    "splits":
+    {
+        "train":   [1, 2, 3, 4, 5],
+        "test":    [6, 7],
+        "holdout": [8, 9, 10]
+    },
+    "modeling":
+    {
+        "target_column":   "pp_bi",
+        "target_ceiling":  100000,
+        "ceiling_applies_to": ["pp_bi", "pp_pd"],
+        "exposure_column": "ee_bi",
+        "lift_bins":       10,
+        "_note": "Change target_column to pp_pd, pp_pip, pp_coll, or pp_comp to switch targets. Ceiling applied only to columns listed in ceiling_applies_to."
+    },
+    "xgboost":
+    {
+        "objective":               "reg:tweedie",
+        "tweedie_variance_power":  1.5,
+        "learning_rate":           0.05,
+        "max_depth":               6,
+        "min_child_weight":        100,
+        "subsample":               1.0,
+        "colsample_bytree":        1.0,
+        "alpha":                   0,
+        "n_estimators":            5000,
+        "tree_method":             "hist",
+        "device":                  "cpu",
+        "random_state":            42,
+        "verbosity":               1,
+        "_note": "Tweedie objective for insurance pure premium. base_score computed dynamically as mean(y_train)."
     }
 }
