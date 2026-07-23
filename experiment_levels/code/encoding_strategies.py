@@ -8,14 +8,16 @@ Provides four encoding strategies that operate on the same raw training data:
     Type 1 – Ordinal (0-5)  : Keep original 0-5 integer levels unchanged.
                                Non-0-5 features are passed through as-is.
     Type 2 – Binary          : Collapse every 0-5 feature to 0 or 1 using the
-                               grouping rule in the mapping CSV. String categoricals
-                               are One-Hot Encoded (same as Type 1).
+                               grouping rule {0,1,2}->0 | {3,4,5}->1.
+                               String categoricals are One-Hot Encoded.
     Type 3 – Actuarial       : Per-column strategy from the actuary's docx
                                (LevelMapping.docx, DH-Liab / pp_bi column).
                                Strategies: ordered, binary_low_hi, binary_lo_high,
                                ohe, h_map2to4, ohe_map2to4, group_ohe, drop.
-    Type 4 – Custom          : Reads the 'type_4_custom' column from the mapping
-                               CSV. Falls back to Type 1 if empty.
+    Type 4 – Custom          : Map 2->4 transformation then binary grouping.
+                               For 0-5 features: remap level 2->4, then apply
+                               binary {0,1,4}->0 | {3,5}->1. Result: levels
+                               {0,1,3,4,5} only (no level 2). String features OHE.
 
 All encoders are fitted strictly on the TRAINING data and then applied to the
 test data to prevent leakage.
@@ -46,8 +48,10 @@ TARGET_CEILING    = _cfg["modeling"].get("target_ceiling", None)  # e.g. 100000
 CEILING_COLS      = set(_cfg["modeling"].get("ceiling_applies_to", []))
 EXPOSURE_COL      = _cfg["modeling"].get("exposure_column", None)  # e.g. "ee_bi"
 
-DEBUG_N_TRAIN = 10_000
-DEBUG_N_TEST  = 2_000
+DEBUG_N_TRAIN   = 10_000   # DEBUG=1 : fixed 10K rows
+DEBUG_N_TEST    = 2_000    # DEBUG=1 : fixed 2K rows
+DEBUG_FRAC_TRAIN = 0.10    # DEBUG=2 : 10% of training data
+DEBUG_FRAC_TEST  = 0.10    # DEBUG=2 : 10% of test data
 
 # All potential target columns — always excluded from features
 _ALL_TARGETS = {"pp_bi", "pp_pd", "pp_pip", "pp_coll", "pp_comp",
@@ -70,20 +74,107 @@ EXCLUDE_ALWAYS = list(_ALL_TARGETS | {
 # 1. Data Loading
 # ============================================================================
 
-def load_train_test(debug: bool = True) -> tuple:
-    """Return (train_df, test_df) with target rows where pp_bi is not null."""
-    n_train = DEBUG_N_TRAIN if debug else None
-    n_test  = DEBUG_N_TEST  if debug else None
+def _optimize():
+    """Lazy import of optimize_dtypes to avoid circular dependency at module level."""
+    import sys, os as _os
+    sys.path.insert(0, _os.path.dirname(__file__))
+    from data_processing import optimize_dtypes
+    return optimize_dtypes
 
-    print(f"[{'DEBUG' if debug else 'FULL'}] Loading train ...")
+
+def _debug_label(debug: int) -> str:
+    return {0: "FULL", 1: "DEBUG-10K", 2: "DEBUG-10%"}.get(debug, "FULL")
+
+
+def load_train_only(debug: int = 1) -> pd.DataFrame:
+    """Return train_df with target rows where TARGET is not null.
+
+    Loads only the training parquet — keeps memory free for encoding/training.
+    dtype-optimized immediately after load (float64→float32, int64→int32).
+
+    Parameters
+    ----------
+    debug : int
+        0 = full data
+        1 = first 10K rows (fast smoke test)
+        2 = random 10% sample (medium-scale run, ~10× bigger than debug=1)
+    """
+    optimize_dtypes = _optimize()
+    label = _debug_label(debug)
+
+    print(f"[{label}] Loading train ...")
     train = pd.read_parquet(TRAIN_PATH)
-    if n_train:
-        train = train.head(n_train)
 
-    print(f"[{'DEBUG' if debug else 'FULL'}] Loading test  ...")
+    if debug == 1:
+        train = train.head(DEBUG_N_TRAIN)
+    elif debug == 2:
+        train = train.sample(frac=DEBUG_FRAC_TRAIN, random_state=42)
+
+    train = optimize_dtypes(train)
+    train = train[train[TARGET].notna()].reset_index(drop=True)
+    print(f"  Train: {len(train):,} rows")
+    return train
+
+
+def load_test_only(debug: int = 1) -> pd.DataFrame:
+    """Return test_df with target rows where TARGET is not null.
+
+    Loads only the test parquet — call this in the separate evaluation notebook
+    after all models have been trained and saved.
+    dtype-optimized immediately after load (float64→float32, int64→int32).
+
+    Parameters
+    ----------
+    debug : int
+        0 = full data
+        1 = first 2K rows
+        2 = random 10% sample
+    """
+    optimize_dtypes = _optimize()
+    label = _debug_label(debug)
+
+    print(f"[{label}] Loading test ...")
     test = pd.read_parquet(TEST_PATH)
-    if n_test:
-        test = test.head(n_test)
+
+    if debug == 1:
+        test = test.head(DEBUG_N_TEST)
+    elif debug == 2:
+        test = test.sample(frac=DEBUG_FRAC_TEST, random_state=42)
+
+    test = optimize_dtypes(test)
+    test = test[test[TARGET].notna()].reset_index(drop=True)
+    print(f"  Test: {len(test):,} rows")
+    return test
+
+
+def load_train_test(debug: int = 1) -> tuple:
+    """Return (train_df, test_df) with target rows where TARGET is not null.
+
+    Loads both datasets simultaneously.  Use load_train_only() + load_test_only()
+    instead when memory is a concern (full-data runs).
+
+    Parameters
+    ----------
+    debug : int  – 0 = full, 1 = 10K/2K rows, 2 = 10% sample
+    """
+    optimize_dtypes = _optimize()
+    label = _debug_label(debug)
+
+    print(f"[{label}] Loading train ...")
+    train = pd.read_parquet(TRAIN_PATH)
+    if debug == 1:
+        train = train.head(DEBUG_N_TRAIN)
+    elif debug == 2:
+        train = train.sample(frac=DEBUG_FRAC_TRAIN, random_state=42)
+    train = optimize_dtypes(train)
+
+    print(f"[{label}] Loading test  ...")
+    test = pd.read_parquet(TEST_PATH)
+    if debug == 1:
+        test = test.head(DEBUG_N_TEST)
+    elif debug == 2:
+        test = test.sample(frac=DEBUG_FRAC_TEST, random_state=42)
+    test = optimize_dtypes(test)
 
     # Drop rows where target is null
     train = train[train[TARGET].notna()].reset_index(drop=True)
@@ -187,13 +278,21 @@ def _transform_ohe(col: str, s: pd.Series, enc: OneHotEncoder) -> pd.DataFrame:
 # 4. Encoding strategy functions
 # ============================================================================
 
-def encode_type1_ordinal(train: pd.DataFrame, test: pd.DataFrame):
+def encode_type1_ordinal(train: pd.DataFrame, test: pd.DataFrame = None):
     """
     Type 1 – Ordinal: pass all numeric features through unchanged.
-    Object columns are label-encoded (integer code, -1 for NaN).
+    Object columns are One-Hot Encoded (fit on train, applied to test).
 
-    Returns:
-        X_train, X_test, feature_names
+    Parameters
+    ----------
+    train : DataFrame  – training data (used to fit encoders)
+    test  : DataFrame or None – if None, only X_train + encoders are returned
+            (use encode_type1_ordinal_transform to apply to test later)
+
+    Returns
+    -------
+    If test is provided : X_train, X_test, feature_names, encoders
+    If test is None     : X_train, feature_names, encoders
     """
     print("  [Type 1] Ordinal encoding ...")
     num_cols = _get_numeric_features(train)
@@ -201,36 +300,55 @@ def encode_type1_ordinal(train: pd.DataFrame, test: pd.DataFrame):
 
     # Numeric columns: keep ordinal (no change)
     X_tr = train[num_cols].astype("float32").copy()
-    X_te = test[num_cols].astype("float32").copy()
     feat_names = list(X_tr.columns)
 
-    # String columns: One-Hot Encode (avoids false ordinal relationship)
-    ohe_parts_tr, ohe_parts_te, ohe_names = [], [], []
+    # String columns: One-Hot Encode (fit on train)
+    ohe_parts_tr, ohe_names = [], []
+    encoders = {}
     for col in obj_cols:
         enc = _fit_ohe_for_col(col, train[col].astype(str))
+        encoders[col] = enc
         ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
-        ohe_te = _transform_ohe(col, test[col].astype(str),  enc)
         ohe_parts_tr.append(ohe_tr)
-        ohe_parts_te.append(ohe_te)
         ohe_names.extend(ohe_tr.columns.tolist())
 
     if ohe_parts_tr:
         X_tr = pd.concat([X_tr] + ohe_parts_tr, axis=1)
-        X_te = pd.concat([X_te] + ohe_parts_te, axis=1)
         feat_names.extend(ohe_names)
 
     print(f"     Features: {len(feat_names)}  (numeric ordinal: {len(num_cols)}, OHE string: {len(ohe_names)})")
-    return X_tr, X_te, feat_names
+
+    if test is None:
+        return X_tr, feat_names, encoders
+
+    # Apply to test
+    X_te = test[num_cols].astype("float32").copy()
+    ohe_parts_te = []
+    for col in obj_cols:
+        enc = encoders[col]
+        ohe_te = _transform_ohe(col, test[col].astype(str), enc)
+        ohe_parts_te.append(ohe_te)
+    if ohe_parts_te:
+        X_te = pd.concat([X_te] + ohe_parts_te, axis=1)
+
+    return X_tr, X_te, feat_names, encoders
 
 
-def encode_type2_binary(train: pd.DataFrame, test: pd.DataFrame):
+def encode_type2_binary(train: pd.DataFrame, test: pd.DataFrame = None):
     """
     Type 2 – Binary: collapse every 0-5 feature to {0,1} using default
     {0,1,2}->0, {3,4,5}->1. Non-0-5 numerics pass through. Object columns
-    are label-encoded.
+    are One-Hot Encoded (fit on train).
 
-    Returns:
-        X_train, X_test, feature_names
+    Parameters
+    ----------
+    train : DataFrame  – training data (used to fit encoders)
+    test  : DataFrame or None – if None, only X_train + encoders are returned
+
+    Returns
+    -------
+    If test is provided : X_train, X_test, feature_names, encoders
+    If test is None     : X_train, feature_names, encoders
     """
     print("  [Type 2] Binary encoding ...")
     num_cols = _get_numeric_features(train)
@@ -240,37 +358,51 @@ def encode_type2_binary(train: pd.DataFrame, test: pd.DataFrame):
     high_set = {3, 4, 5}
 
     X_tr = pd.DataFrame(index=train.index)
-    X_te = pd.DataFrame(index=test.index)
 
+    encoders = {}
     for col in num_cols:
         if _is_0_5_col(train[col]):
             X_tr[col] = _apply_binary_map(train[col], low_set, high_set)
-            X_te[col] = _apply_binary_map(test[col],  low_set, high_set)
         else:
             X_tr[col] = train[col].astype("float32")
-            X_te[col] = test[col].astype("float32")
 
-    # String columns: One-Hot Encode (same logic as Type 1 — no false ordinality)
-    ohe_parts_tr, ohe_parts_te, ohe_names = [], [], []
+    # String columns: One-Hot Encode (fit on train)
+    ohe_parts_tr, ohe_names = [], []
     for col in obj_cols:
         enc = _fit_ohe_for_col(col, train[col].astype(str))
+        encoders[col] = enc
         ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
-        ohe_te = _transform_ohe(col, test[col].astype(str),  enc)
         ohe_parts_tr.append(ohe_tr)
-        ohe_parts_te.append(ohe_te)
         ohe_names.extend(ohe_tr.columns.tolist())
 
     if ohe_parts_tr:
         X_tr = pd.concat([X_tr] + ohe_parts_tr, axis=1)
-        X_te = pd.concat([X_te] + ohe_parts_te, axis=1)
 
     feat_names = list(X_tr.columns)
     n_binary = sum(_is_0_5_col(train[c]) for c in num_cols)
     print(f"     Features: {len(feat_names)}  (0-5 binary: {n_binary}, other numeric: {len(num_cols)-n_binary}, OHE string: {len(ohe_names)})")
-    return X_tr, X_te, feat_names
+
+    if test is None:
+        return X_tr, feat_names, encoders
+
+    # Apply to test
+    X_te = pd.DataFrame(index=test.index)
+    for col in num_cols:
+        if _is_0_5_col(train[col]):
+            X_te[col] = _apply_binary_map(test[col], low_set, high_set)
+        else:
+            X_te[col] = test[col].astype("float32")
+    ohe_parts_te = []
+    for col in obj_cols:
+        ohe_te = _transform_ohe(col, test[col].astype(str), encoders[col])
+        ohe_parts_te.append(ohe_te)
+    if ohe_parts_te:
+        X_te = pd.concat([X_te] + ohe_parts_te, axis=1)
+
+    return X_tr, X_te, feat_names, encoders
 
 
-def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame):
+def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame = None):
     """
     Type 3 – Actuarial: per-column strategy from LevelMapping.docx (DH-Liab).
 
@@ -285,8 +417,15 @@ def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame):
       drop          -> feature excluded
       not_specified -> pass through numeric; label-encode strings
 
-    Returns:
-        X_train, X_test, feature_names, encoders_dict
+    Parameters
+    ----------
+    train : DataFrame – training data (encoders fitted here)
+    test  : DataFrame or None – if None returns (X_train, feat_names, encoders)
+
+    Returns
+    -------
+    If test is provided : X_train, X_test, feat_names, encoders
+    If test is None     : X_train, feat_names, encoders
     """
     print("  [Type 3] Actuarial encoding ...")
     mapping = _load_mapping()
@@ -298,7 +437,6 @@ def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame):
     all_cols = num_cols + obj_cols
 
     X_tr_parts = []
-    X_te_parts = []
     feat_names = []
     encoders   = {}
 
@@ -311,104 +449,168 @@ def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame):
         if strat == "drop":
             continue
 
-        elif strat == "ordered" or strat == "not_specified":
+        elif strat in ("ordered", "not_specified"):
             if col in num_cols:
                 X_tr_parts.append(train[[col]].astype("float32"))
-                X_te_parts.append(test[[col]].astype("float32"))
                 feat_names.append(col)
             else:
                 cat = pd.Categorical(train[col])
                 tr_s = pd.Series(cat.codes, index=train.index, name=col, dtype="float32")
-                te_s = pd.Series(pd.Categorical(test[col], categories=cat.categories).codes,
-                                 index=test.index, name=col, dtype="float32")
                 X_tr_parts.append(tr_s.to_frame())
-                X_te_parts.append(te_s.to_frame())
                 feat_names.append(col)
-                encoders[col] = cat.categories
+                encoders[col] = ("label", cat.categories)
 
         elif strat == "binary_low_hi":
             s_tr = _apply_binary_map(train[col], *LOW_HI)
-            s_te = _apply_binary_map(test[col],  *LOW_HI)
             X_tr_parts.append(s_tr.rename(col).to_frame())
-            X_te_parts.append(s_te.rename(col).to_frame())
             feat_names.append(col)
 
         elif strat == "binary_lo_high":
             s_tr = _apply_binary_map(train[col], *LO_HIGH)
-            s_te = _apply_binary_map(test[col],  *LO_HIGH)
             X_tr_parts.append(s_tr.rename(col).to_frame())
-            X_te_parts.append(s_te.rename(col).to_frame())
             feat_names.append(col)
 
         elif strat in ("ohe", "group_ohe"):
             enc = _fit_ohe_for_col(col, train[col].astype(str))
             ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
-            ohe_te = _transform_ohe(col, test[col].astype(str),  enc)
             X_tr_parts.append(ohe_tr)
-            X_te_parts.append(ohe_te)
             feat_names.extend(ohe_tr.columns.tolist())
-            encoders[col] = enc
+            encoders[col] = ("ohe", enc)
 
         elif strat == "h_map2to4":
             s_tr = _apply_h_map2to4(train[col])
-            s_te = _apply_h_map2to4(test[col])
             X_tr_parts.append(s_tr.rename(col).to_frame())
-            X_te_parts.append(s_te.rename(col).to_frame())
             feat_names.append(col)
 
         elif strat == "ohe_map2to4":
-            # Step 1: remap 2->4
             s_tr = _apply_h_map2to4(train[col]).astype(str)
-            s_te = _apply_h_map2to4(test[col]).astype(str)
-            # Step 2: OHE on remapped values
             enc = _fit_ohe_for_col(col, s_tr)
             ohe_tr = _transform_ohe(col, s_tr, enc)
-            ohe_te = _transform_ohe(col, s_te, enc)
             X_tr_parts.append(ohe_tr)
-            X_te_parts.append(ohe_te)
             feat_names.extend(ohe_tr.columns.tolist())
-            encoders[col] = enc
+            encoders[col] = ("ohe_map2to4", enc)
+
+    # Also store strategy_map in encoders for transform step
+    encoders["__strategy_map__"] = strategy_map
+    encoders["__num_cols__"]     = num_cols
+    encoders["__obj_cols__"]     = obj_cols
 
     X_train = pd.concat(X_tr_parts, axis=1)
-    X_test  = pd.concat(X_te_parts, axis=1)
     print(f"     Features: {len(feat_names)}")
+
+    if test is None:
+        return X_train, feat_names, encoders
+
+    # Apply to test using fitted encoders
+    X_te_parts = []
+    for col in all_cols:
+        strat = strategy_map.get(col, "not_specified")
+        if strat == "drop":
+            continue
+        elif strat in ("ordered", "not_specified"):
+            if col in num_cols:
+                X_te_parts.append(test[[col]].astype("float32"))
+            else:
+                cats = encoders[col][1]
+                te_s = pd.Series(pd.Categorical(test[col], categories=cats).codes,
+                                 index=test.index, name=col, dtype="float32")
+                X_te_parts.append(te_s.to_frame())
+        elif strat == "binary_low_hi":
+            X_te_parts.append(_apply_binary_map(test[col], *LOW_HI).rename(col).to_frame())
+        elif strat == "binary_lo_high":
+            X_te_parts.append(_apply_binary_map(test[col], *LO_HIGH).rename(col).to_frame())
+        elif strat in ("ohe", "group_ohe"):
+            enc = encoders[col][1]
+            X_te_parts.append(_transform_ohe(col, test[col].astype(str), enc))
+        elif strat == "h_map2to4":
+            X_te_parts.append(_apply_h_map2to4(test[col]).rename(col).to_frame())
+        elif strat == "ohe_map2to4":
+            enc = encoders[col][1]
+            s_te = _apply_h_map2to4(test[col]).astype(str)
+            X_te_parts.append(_transform_ohe(col, s_te, enc))
+
+    X_test = pd.concat(X_te_parts, axis=1)
     return X_train, X_test, feat_names, encoders
 
 
-def encode_type4_custom(train: pd.DataFrame, test: pd.DataFrame):
+def encode_type4_custom(train: pd.DataFrame, test: pd.DataFrame = None):
     """
-    Type 4 – Custom: reads 'type_4_custom' column from the mapping CSV.
-    If empty / not specified for a feature, falls back to Type 1 (ordinal).
+    Type 4 – Custom: Map 2->4 transformation + binary grouping.
+    
+    For all 0-5 features:
+      1. Remap level 2 -> level 4  (using _apply_h_map2to4)
+      2. Apply binary grouping: {0,1,4}->0 | {3,5}->1
+      
+    Result: Features will only have levels {0, 1, 3, 4, 5} (no level 2).
+    Non-0-5 numeric features pass through unchanged.
+    String features are One-Hot Encoded (fit on train).
 
-    Placeholder: until the CSV is populated, this will behave identically
-    to encode_type1_ordinal. Add your strategies to the CSV to activate them.
+    Parameters
+    ----------
+    train : DataFrame – training data (encoders fitted here)
+    test  : DataFrame or None – if None returns (X_train, feat_names, encoders)
 
-    Returns:
-        X_train, X_test, feature_names
+    Returns
+    -------
+    If test is provided : X_train, X_test, feat_names, encoders
+    If test is None     : X_train, feat_names, encoders
     """
-    print("  [Type 4] Custom encoding (reads type_4_custom from CSV) ...")
-    mapping = _load_mapping()
-    custom_map = dict(zip(mapping["feature"], mapping["type_4_custom"].fillna("")))
-
+    print("  [Type 4] Custom encoding (map 2->4, then binary {0,1,4}->0 | {3,5}->1) ...")
     num_cols = _get_numeric_features(train)
     obj_cols = _get_object_features(train)
 
-    X_tr = pd.DataFrame(index=train.index)
-    X_te = pd.DataFrame(index=test.index)
+    # Define binary groups AFTER 2->4 remapping
+    # After remapping: 0,1,4 are "low", 3,5 are "high"
+    low_set  = {0, 1, 4}
+    high_set = {3, 5}
 
-    for col in num_cols + obj_cols:
-        custom = str(custom_map.get(col, "")).strip()
-        # Currently treats empty as ordinal; extend this if-block as needed
-        if custom == "":
-            # Fallback: ordinal / label encode
-            if col in num_cols:
-                X_tr[col] = train[col].astype("float32")
-                X_te[col] = test[col].astype("float32")
-            else:
-                cat = pd.Categorical(train[col])
-                X_tr[col] = cat.codes.astype("float32")
-                X_te[col] = pd.Categorical(test[col], categories=cat.categories).codes.astype("float32")
+    X_tr = pd.DataFrame(index=train.index)
+    encoders = {}
+    
+    # Process numeric columns
+    for col in num_cols:
+        if _is_0_5_col(train[col]):
+            # Step 1: Remap 2->4
+            remapped = _apply_h_map2to4(train[col])
+            # Step 2: Apply binary grouping
+            X_tr[col] = _apply_binary_map(remapped, low_set, high_set)
+        else:
+            # Non-0-5 features: pass through
+            X_tr[col] = train[col].astype("float32")
+
+    # String columns: One-Hot Encode (fit on train)
+    ohe_parts_tr, ohe_names = [], []
+    for col in obj_cols:
+        enc = _fit_ohe_for_col(col, train[col].astype(str))
+        encoders[col] = enc
+        ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
+        ohe_parts_tr.append(ohe_tr)
+        ohe_names.extend(ohe_tr.columns.tolist())
+
+    if ohe_parts_tr:
+        X_tr = pd.concat([X_tr] + ohe_parts_tr, axis=1)
 
     feat_names = list(X_tr.columns)
-    print(f"     Features: {len(feat_names)}  (custom strategies pending CSV population)")
-    return X_tr, X_te, feat_names
+    n_mapped = sum(_is_0_5_col(train[c]) for c in num_cols)
+    print(f"     Features: {len(feat_names)}  (0-5 map2to4+binary: {n_mapped}, other numeric: {len(num_cols)-n_mapped}, OHE string: {len(ohe_names)})")
+
+    if test is None:
+        return X_tr, feat_names, encoders
+
+    # Apply to test
+    X_te = pd.DataFrame(index=test.index)
+    for col in num_cols:
+        if _is_0_5_col(train[col]):  # Use train to determine if 0-5
+            remapped = _apply_h_map2to4(test[col])
+            X_te[col] = _apply_binary_map(remapped, low_set, high_set)
+        else:
+            X_te[col] = test[col].astype("float32")
+    
+    ohe_parts_te = []
+    for col in obj_cols:
+        ohe_te = _transform_ohe(col, test[col].astype(str), encoders[col])
+        ohe_parts_te.append(ohe_te)
+    if ohe_parts_te:
+        X_te = pd.concat([X_te] + ohe_parts_te, axis=1)
+
+    return X_tr, X_te, feat_names, encoders

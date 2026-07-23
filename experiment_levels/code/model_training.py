@@ -174,6 +174,75 @@ def train_and_evaluate(
     }
 
 
+def train_on_train_data(
+    experiment_name: str,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    feature_names: list,
+    xgb_params: dict = None,
+) -> dict:
+    """
+    Train an XGBoost model on training data only (no test evaluation).
+
+    Use this in the memory-efficient training notebook.  The saved model can
+    be loaded later by the test-evaluation notebook via load_experiment().
+
+    Parameters
+    ----------
+    experiment_name : str – short label, e.g. 'type1_ordinal'.
+    X_train, y_train : training features and target.
+    feature_names    : list of feature name strings (post-encoding).
+    xgb_params       : dict of XGBoost parameters (defaults used if None).
+
+    Returns
+    -------
+    dict with keys: experiment_name, model, feature_names, metrics,
+                    y_train_pred, xgb_params
+    """
+    params = {**DEFAULT_XGB_PARAMS, **(xgb_params or {})}
+    if "base_score" not in params:
+        params["base_score"] = float(y_train.mean())
+
+    print(f"\n  Training {experiment_name} (train-only) ...")
+    print(f"    X_train shape : {X_train.shape}")
+    print(f"    base_score    : {params['base_score']:.4f}  (mean of y_train)")
+
+    X_train = X_train.fillna(-1)
+
+    t0    = time.time()
+    model = xgb.XGBRegressor(**params)
+    model.fit(X_train, y_train, verbose=False)
+    elapsed = round(time.time() - t0, 1)
+
+    # Evaluate on training set (for quick sanity / lift chart feedback)
+    y_train_pred = model.predict(X_train)
+    rmse_tr = float(np.sqrt(mean_squared_error(y_train, y_train_pred)))
+    mae_tr  = float(mean_absolute_error(y_train, y_train_pred))
+    r2_tr   = float(r2_score(y_train, y_train_pred))
+
+    metrics = {
+        "train_rmse":        round(rmse_tr, 6),
+        "train_mae":         round(mae_tr,  6),
+        "train_r2":          round(r2_tr,   6),
+        "training_time_sec": elapsed,
+        "n_train":           len(y_train),
+        "n_features":        len(feature_names),
+    }
+
+    print(f"    ✅ Done  |  Train RMSE={rmse_tr:.4f}  MAE={mae_tr:.4f}  "
+          f"R²={r2_tr:.4f}  Time={elapsed}s")
+
+    return {
+        "experiment_name": experiment_name,
+        "model":           model,
+        "feature_names":   feature_names,
+        "metrics":         metrics,
+        "y_pred":          y_train_pred,   # train predictions (for lift chart)
+        "y_true":          y_train.values, # train actuals
+        "xgb_params":      params,
+    }
+
+
 # ============================================================================
 # 2. Save experiment artifacts
 # ============================================================================
@@ -216,13 +285,14 @@ def save_experiment(result: dict, encoders: dict = None) -> str:
     with open(params_path, "w") as f:
         json.dump(result["xgb_params"], f, indent=2)
 
-    # ── Test predictions ──────────────────────────────────────────────────────
-    pred_df = pd.DataFrame({
-        "y_true": result["y_true"],
-        "y_pred": result["y_pred"],
-        "residual": result["y_true"] - result["y_pred"],
-    })
-    pred_df.to_csv(os.path.join(exp_dir, "test_predictions.csv"), index=False)
+    # ── Predictions CSV (train or test) ───────────────────────────────────────
+    if "y_true" in result and result["y_true"] is not None:
+        pred_df = pd.DataFrame({
+            "y_true": result["y_true"],
+            "y_pred": result["y_pred"],
+            "residual": result["y_true"] - result["y_pred"],
+        })
+        pred_df.to_csv(os.path.join(exp_dir, "train_predictions.csv"), index=False)
 
     # ── Encoders (optional) ───────────────────────────────────────────────────
     if encoders:
