@@ -1,0 +1,100 @@
+# MANUAL CONFIGURATION - DO NOT AUTO-GENERATE
+# This file lists columns to exclude from all encoding strategies (Type 1-4)
+# Add high-cardinality IDs, join keys, duplicates, or problematic columns here
+column_name,reason,category
+vin,potential_high_cardinality,id
+vin_date,join_key,id
+vin_x,join_key_component,id
+vin_y,join_key_component,id
+superpolicy_id,high_cardinality_id,id
+policyid,high_cardinality_id,id
+reference_num,high_cardinality_id,id
+companyid,high_cardinality_id,id
+poleffdt,date_field,temporal
+polexpdt_raw,date_field,temporal
+polexpdt_imps,date_field,temporal
+coveffdt_raw,date_field,temporal
+coveffdt_imps,date_field,temporal
+covexpdt_raw,date_field,temporal
+covexpdt_imps,date_field,temporal
+origpoleffdt_raw,date_field,temporal
+origpoleffdt_imps,date_field,temporal
+poleffdt_imps,date_field,temporal
+zip,high_cardinality_geo,geo
+insstate,duplicate_of_st_raw_x,duplicate
+fold,train_test_split_marker,structural
+ee_bi,exposure_column_leakage,leakage
+ee_pd,exposure_column_leakage,leakage
+ee_pip,exposure_column_leakage,leakage
+ee_coll,exposure_column_leakage,leakage
+ee_comp,exposure_column_leakage,leakage
+claim_count,reveals_claim_occurrence,leakage
+claims_count,reveals_claim_occurrence,leakage
+incurred,reveals_claim_amounts,leakage
+incurred_bi,reveals_claim_amounts,leakage
+incurred_pd,reveals_claim_amounts,leakage
+incurred_pip,reveals_claim_amounts,leakage
+incurred_coll,reveals_claim_amounts,leakage
+incurred_comp,reveals_claim_amounts,leakage
+claim_count_bi_raw, reveals_claim_count,leakage
+incurred_raw_bi_raw, reveals_claim_count,leakage
+ee_bi_raw, reveals_exposure,leakage
+ee_pd_raw, reveals_exposure,leakage
+ee_pd_imps, reveals_exposure,leakage
+ee_raw, reveals_exposure,leakage
+incloss_raw, reveals_raw_incloss, leakage
+incloss_bi_raw, reveals_raw_incloss, leakage
+incloss_pd_raw, reveals_raw_incloss, leakage
+incloss_pip_raw, reveals_raw_incloss, leakage
+incloss_coll_raw, reveals_raw_incloss, leakage
+incloss_comp_raw, reveals_raw_incloss, leakage
+incloss_total_raw, reveals_raw_incloss, leakage
+incloss_bi_adj, reveals_raw_incloss, leakage
+incloss_pd_adj, reveals_raw_incloss, leakage
+claim_count_bi_imps,data_leakage,leakage
+claim_count_coll_imps,data_leakage,leakage
+claim_count_coll_raw,data_leakage,leakage
+claim_count_comp_imps,data_leakage,leakage
+claim_count_comp_raw,data_leakage,leakage
+claim_count_imps,data_leakage,leakage
+claim_count_med_cal,data_leakage,leakage
+claim_count_med_cal_imps,data_leakage,leakage
+claim_count_pd_imps,data_leakage,leakage
+claim_count_pd_raw,data_leakage,leakage
+claim_count_pip_imps,data_leakage,leakage
+claim_count_pip_raw,data_leakage,leakage
+claim_count_raw,data_leakage,leakage
+claim_count_uim_imps,data_leakage,leakage
+claim_count_uim_raw,data_leakage,leakage
+claim_count_um_imps,data_leakage,leakage
+claim_count_um_raw,data_leakage,leakage
+ee_bi_imps,data_leakage,leakage
+ee_coll_imp_imps,data_leakage,leakage
+ee_coll_imps,data_leakage,leakage
+ee_comp_imps,data_leakage,leakage
+ee_comp_raw,data_leakage,leakage
+ee_imps,data_leakage,leakage
+ee_med_imps,data_leakage,leakage
+ee_med_raw,data_leakage,leakage
+ee_pip_imps,data_leakage,leakage
+ee_pip_raw,data_leakage,leakage
+ee_uim_imps,data_leakage,leakage
+ee_uim_raw,data_leakage,leakage
+ee_um_imps,data_leakage,leakage
+ee_um_raw,data_leakage,leakage
+incloss_imps,data_leakage,leakage
+incurred_raw_bi_imps,data_leakage,leakage
+incurred_raw_coll_imps,data_leakage,leakage
+incurred_raw_coll_raw,data_leakage,leakage
+incurred_raw_comp_imps,data_leakage,leakage
+incurred_raw_comp_raw,data_leakage,leakage
+incurred_raw_med_cal,data_leakage,leakage
+incurred_raw_med_cal_imps,data_leakage,leakage
+incurred_raw_pd_imps,data_leakage,leakage
+incurred_raw_pd_raw,data_leakage,leakage
+incurred_raw_pip_imps,data_leakage,leakage
+incurred_raw_pip_raw,data_leakage,leakage
+incurred_raw_uim_imps,data_leakage,leakage
+incurred_raw_uim_raw,data_leakage,leakage
+incurred_raw_um_imps,data_leakage,leakage
+incurred_raw_um_raw,data_leakage,leakage

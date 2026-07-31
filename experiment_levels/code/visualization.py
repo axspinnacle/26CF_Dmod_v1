@@ -169,21 +169,80 @@ def model_metrics(result: dict, test_df: pd.DataFrame = None,
         (x["act"] * x["weight"]).sum() / x["weight"].sum()
     )
 
-    # Fit quality: 1 – Σ(|pred/act – 1| × w) / Σw
-    x["decile_err"]    = (abs(x["pred"] / x["act"] - 1)
-                          .replace([np.inf, -np.inf], np.nan)
-                          .fillna(1))
-    x["decile_err_sp"] = x["decile_err"] * x["weight"]
-    fit_quality = max(0.0, 1.0 - x["decile_err_sp"].sum() / x["weight"].sum())
+    # ===== Fit Quality Metrics (5 variants) =====
+    
+    # 1. ORIGINAL: Ratio error (can explode with tiny actuals)
+    x["decile_err_ratio"] = (abs(x["pred"] / x["act"] - 1)
+                             .replace([np.inf, -np.inf], np.nan)
+                             .fillna(1))
+    x["decile_err_ratio_sp"] = x["decile_err_ratio"] * x["weight"]
+    weighted_avg_error_ratio = x["decile_err_ratio_sp"].sum() / x["weight"].sum()
+    fit_quality_ratio = 1.0 - weighted_avg_error_ratio  # NO CLAMPING! Can be negative
+    
+    # 2. ABSOLUTE ERROR: |pred - act|
+    x["decile_err_abs"] = abs(x["pred"] - x["act"])
+    x["decile_err_abs_sp"] = x["decile_err_abs"] * x["weight"]
+    total_act_weighted = (x["act"] * x["weight"]).sum()
+    fit_quality_abs = 1.0 - x["decile_err_abs_sp"].sum() / total_act_weighted if total_act_weighted > 0 else 0.0
+    
+    # 3. NORMALIZED ABSOLUTE ERROR (MAE-style)
+    fit_quality_norm_abs = fit_quality_abs  # Same as #2 for single metric
+    
+    # 4. HYBRID: % for large actuals, absolute for small
+    threshold = 1.0
+    x["decile_err_hybrid"] = np.where(
+        x["act"] > threshold,
+        abs(x["pred"] / x["act"] - 1),
+        abs(x["pred"] - x["act"]) / threshold
+    )
+    x["decile_err_hybrid_sp"] = x["decile_err_hybrid"] * x["weight"]
+    weighted_avg_error_hybrid = x["decile_err_hybrid_sp"].sum() / x["weight"].sum()
+    fit_quality_hybrid = 1.0 - weighted_avg_error_hybrid
+    
+    # 5. LOG-SCALE ERROR (for sparse claims)
+    x["decile_err_log"] = abs(np.log1p(x["pred"]) - np.log1p(x["act"]))
+    x["decile_err_log_sp"] = x["decile_err_log"] * x["weight"]
+    weighted_avg_error_log = x["decile_err_log_sp"].sum() / x["weight"].sum()
+    # Normalize to [0,1] range (log errors typically < 10)
+    fit_quality_log = max(0.0, 1.0 - weighted_avg_error_log / 10.0)
+    
+    # DEBUG: Print fit_quality calculation details
+    print(f"\n[DEBUG] Fit Quality Metrics for {result['experiment_name']}:")
+    print(f"  Total deciles: {len(x)}")
+    print(f"  Deciles with act=0: {(x['act'] == 0).sum()}")
+    print(f"  Deciles with act>0: {(x['act'] > 0).sum()}")
+    print(f"\n  === 5 FIT QUALITY VARIANTS ===")
+    print(f"  1. Ratio (original):      {fit_quality_ratio:.6f}  (can be negative!)")
+    print(f"  2. Absolute error:        {fit_quality_abs:.6f}")
+    print(f"  3. Norm absolute (MAE):   {fit_quality_norm_abs:.6f}")
+    print(f"  4. Hybrid (threshold=1):  {fit_quality_hybrid:.6f}")
+    print(f"  5. Log-scale:             {fit_quality_log:.6f}")
+    print(f"\n  Weighted avg errors:")
+    print(f"    Ratio:   {weighted_avg_error_ratio:.4f}")
+    print(f"    Hybrid:  {weighted_avg_error_hybrid:.4f}")
+    print(f"    Log:     {weighted_avg_error_log:.4f}")
+    print("\n  Decile Details (all bins):")
+    display_df = x[['decile', 'act', 'pred', 'weight']].copy()
+    display_df['error_%'] = ((x['pred'] / x['act'] - 1) * 100).replace([np.inf, -np.inf], np.nan)
+    display_df['act'] = display_df['act'].apply(lambda v: f"{v:.2f}")
+    display_df['pred'] = display_df['pred'].apply(lambda v: f"{v:.2f}")
+    display_df['weight'] = display_df['weight'].apply(lambda v: f"{v:.0f}")
+    display_df['error_%'] = display_df['error_%'].apply(lambda v: f"{v:.1f}%" if pd.notna(v) else "100.0% (act=0)")
+    print(display_df.to_string(index=False))
+    print()
 
     # Model power: Σ(|pred/mean – 1| × w) / Σw
     x["diff_unity"] = abs(x["pred"] / tot_pp - 1) * x["weight"]
     model_power = x["diff_unity"].sum() / x["weight"].sum()
 
     return {
-        "experiment_name": result["experiment_name"],
-        "model_power":     round(model_power, 6),
-        "fit_quality":     round(fit_quality, 6),
+        "experiment_name":      result["experiment_name"],
+        "model_power":          round(model_power, 6),
+        "fit_quality":          round(fit_quality_ratio, 6),      # Original (can be negative)
+        "fit_quality_abs":      round(fit_quality_abs, 6),
+        "fit_quality_norm_abs": round(fit_quality_norm_abs, 6),
+        "fit_quality_hybrid":   round(fit_quality_hybrid, 6),
+        "fit_quality_log":      round(fit_quality_log, 6),
     }
 
 

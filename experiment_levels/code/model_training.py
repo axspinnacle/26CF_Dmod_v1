@@ -102,6 +102,7 @@ def train_and_evaluate(
     y_test:  pd.Series,
     feature_names: list,
     xgb_params: dict = None,
+    sample_weight: pd.Series = None,
 ) -> dict:
     """
     Train an XGBoost model and evaluate on the test set.
@@ -114,6 +115,8 @@ def train_and_evaluate(
     X_test, y_test   : test features and target.
     feature_names    : list of feature name strings (post-encoding).
     xgb_params       : dict of XGBoost parameters (defaults used if None).
+    sample_weight    : pd.Series, optional
+        Exposure weights for training (e.g., ee_bi column).
 
     Returns
     -------
@@ -139,7 +142,11 @@ def train_and_evaluate(
     # ── Train ─────────────────────────────────────────────────────────────────
     t0    = time.time()
     model = xgb.XGBRegressor(**params)
-    model.fit(X_train, y_train, verbose=False)
+    if sample_weight is not None:
+        print(f"    sample_weight : {len(sample_weight)} values (exposure-weighted training)")
+        model.fit(X_train, y_train, sample_weight=sample_weight, verbose=False)
+    else:
+        model.fit(X_train, y_train, verbose=False)
     elapsed = round(time.time() - t0, 1)
 
     # ── Predict ───────────────────────────────────────────────────────────────
@@ -180,6 +187,7 @@ def train_on_train_data(
     y_train: pd.Series,
     feature_names: list,
     xgb_params: dict = None,
+    sample_weight: pd.Series = None,
 ) -> dict:
     """
     Train an XGBoost model on training data only (no test evaluation).
@@ -193,6 +201,8 @@ def train_on_train_data(
     X_train, y_train : training features and target.
     feature_names    : list of feature name strings (post-encoding).
     xgb_params       : dict of XGBoost parameters (defaults used if None).
+    sample_weight    : pd.Series, optional
+        Exposure weights for training (e.g., ee_bi column).
 
     Returns
     -------
@@ -211,7 +221,11 @@ def train_on_train_data(
 
     t0    = time.time()
     model = xgb.XGBRegressor(**params)
-    model.fit(X_train, y_train, verbose=False)
+    if sample_weight is not None:
+        print(f"    sample_weight : {len(sample_weight)} values (exposure-weighted training)")
+        model.fit(X_train, y_train, sample_weight=sample_weight, verbose=False)
+    else:
+        model.fit(X_train, y_train, verbose=False)
     elapsed = round(time.time() - t0, 1)
 
     # Evaluate on training set (for quick sanity / lift chart feedback)

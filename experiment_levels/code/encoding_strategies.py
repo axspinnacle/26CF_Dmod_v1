@@ -57,17 +57,66 @@ DEBUG_FRAC_TEST  = 0.10    # DEBUG=2 : 10% of test data
 _ALL_TARGETS = {"pp_bi", "pp_pd", "pp_pip", "pp_coll", "pp_comp",
                 "ee_bi", "ee_pd", "ee_pip", "ee_coll", "ee_comp"}
 
-# Columns that are identifiers / dates / targets / fold -> always excluded
-EXCLUDE_ALWAYS = list(_ALL_TARGETS | {
-    "fold", "vin_date", "vin_x", "vin_y",
-    "superpolicy_id", "policyid", "reference_num", "companyid",
-    "poleffdt", "polexpdt_raw", "polexpdt_imps",
-    "coveffdt_raw", "coveffdt_imps", "covexpdt_raw", "covexpdt_imps",
-    "origpoleffdt_raw", "origpoleffdt_imps", "poleffdt_imps",
-    "zip",
-    # Duplicate state column: use st_raw_x (0% NaN) instead
-    "insstate",
-})
+
+def _load_exclusion_list() -> set:
+    """
+    Load manual column exclusions from config/column_exclusions.csv.
+    
+    This CSV is a MANUAL INPUT file (never auto-generated) that lists columns
+    to exclude from all encoding strategies due to high cardinality, being IDs,
+    join keys, duplicates, or other problematic characteristics.
+    
+    Returns
+    -------
+    set of column names to exclude
+    """
+    csv_path = os.path.join(PROJECT_ROOT, "config", "column_exclusions.csv")
+    if os.path.exists(csv_path):
+        try:
+            df = pd.read_csv(csv_path, comment='#')
+            excluded = set(df["column_name"].tolist())
+            print(f"  ✓ Loaded {len(excluded)} exclusions from column_exclusions.csv")
+            return excluded
+        except Exception as e:
+            print(f"  ⚠️  Warning: Could not load column_exclusions.csv: {e}")
+            return set()
+    else:
+        print(f"  ⚠️  Warning: column_exclusions.csv not found at {csv_path}")
+        return set()
+
+
+def _load_inclusion_list() -> set:
+    """
+    Load FEATURE WHITELIST from config/columns_inclusion.csv.
+    
+    If this file exists, ONLY features listed will be used in training.
+    This allows iterative feature testing to isolate data leakage sources.
+    
+    To disable: rename file to columns_inclusion.csv.disabled
+    To enable: rename back to columns_inclusion.csv
+    
+    Returns
+    -------
+    set of column names to include (None if file doesn't exist = use all)
+    """
+    csv_path = os.path.join(PROJECT_ROOT, "config", "columns_inclusion.csv")
+    if os.path.exists(csv_path):
+        try:
+            df = pd.read_csv(csv_path, comment='#')
+            included = set(df["column_name"].tolist())
+            print(f"  🎯 INCLUSION FILTER ACTIVE: Using ONLY {len(included)} whitelisted features")
+            print(f"     (to disable: rename columns_inclusion.csv → columns_inclusion.csv.disabled)")
+            return included
+        except Exception as e:
+            print(f"  ⚠️  Warning: Could not load columns_inclusion.csv: {e}")
+            return None
+    else:
+        return None  # No inclusion list = use all features (except exclusions)
+
+
+# Columns to exclude from all encoding strategies
+# Combines target columns + manual exclusions from CSV
+EXCLUDE_ALWAYS = list(_ALL_TARGETS | _load_exclusion_list())
 
 
 # ============================================================================
@@ -111,7 +160,15 @@ def load_train_only(debug: int = 1) -> pd.DataFrame:
         train = train.sample(frac=DEBUG_FRAC_TRAIN, random_state=42)
 
     train = optimize_dtypes(train)
+    train = _fix_numeric_object_columns(train)
     train = train[train[TARGET].notna()].reset_index(drop=True)
+    
+    # Scan for potential leakage features
+    scan_results = scan_for_leakage_features(train)
+    if scan_results['leakers']:
+        print("⚠️  Training will proceed, but model may have DATA LEAKAGE!")
+        print("   Review the scanner output above and update column_exclusions.csv\n")
+    
     print(f"  Train: {len(train):,} rows")
     return train
 
@@ -142,6 +199,7 @@ def load_test_only(debug: int = 1) -> pd.DataFrame:
         test = test.sample(frac=DEBUG_FRAC_TEST, random_state=42)
 
     test = optimize_dtypes(test)
+    test = _fix_numeric_object_columns(test)
     test = test[test[TARGET].notna()].reset_index(drop=True)
     print(f"  Test: {len(test):,} rows")
     return test
@@ -234,6 +292,296 @@ def _is_0_5_col(s: pd.Series) -> bool:
     return (len(vals) <= 7) and (float(vals.min()) >= 0) and (float(vals.max()) <= 5)
 
 
+def _fix_numeric_object_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert object columns that should be numeric to numeric dtype.
+    
+    Handles columns like 'model_year_raw', 'pol_tenure_cal' that contain
+    numbers as strings mixed with special values like 'Unknown', 'None'.
+    
+    Special values are converted to NaN (XGBoost handles missing values natively).
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw data with mixed dtypes
+    
+    Returns
+    -------
+    pd.DataFrame
+        Data with corrected dtypes
+    """
+    # Comprehensive list of numeric columns stored as objects
+    numeric_candidates = [
+        # Policy/ownership duration
+        'pol_tenure_cal',
+        'owh_loo_years_cal',
+        'owh_loo_days_raw',
+        'owt_number_of_titling_transactions_raw',
+        
+        # Vehicle years
+        'model_year_raw', 
+        'dml_year_raw',
+        
+        # Mileage and counts
+        'cef_ann_mi_grp_raw',
+        'veh_count_raw',
+        'veh_count_imps',
+        'driver_count_raw',
+        'driver_count_imps',
+        'pol_veh_driver_ratio_cal',
+        
+        # Vehicle specifications
+        'vc_cylinders_raw',
+        'vc_displacement_raw',
+        'vc_engine_valves_raw',
+        'vc_torque_raw',
+        
+        # Driver age
+        'DrvAge_raw',
+        'DrvAge_imps',
+        
+        # Violation/accident counts
+        'NumMinAcc_raw',
+        'NumMinAcc_imps',
+        'NumMajinAcc_raw',
+        'NumMajinAcc_imps',
+        'NumSpdViol_raw',
+        'NumSpdViol_imps',
+        'NumMinViol_raw',
+        'NumMinViol_imps',
+        'NumMajViol_raw',
+        'NumMajViol_imps',
+        
+        # Credit/payment history
+        'late_payments_raw',
+        'late_payments_imps',
+    ]
+    
+    converted_count = 0
+    for col in numeric_candidates:
+        if col in df.columns and df[col].dtype == 'object':
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            converted_count += 1
+    
+    if converted_count > 0:
+        print(f"  ✓ Converted {converted_count} object columns to numeric (special values → NaN)")
+    
+    return df
+
+
+def scan_parquet_schema_for_leakage(parquet_path: str = None,
+                                     leakage_patterns: list = None) -> dict:
+    """
+    FAST schema-only scan - reads column names from parquet metadata (no data loaded!).
+    
+    Use this BEFORE load_train_only() to proactively identify leakers.
+    Ultra-fast (~100ms vs 30+ seconds for full data load).
+    
+    Parameters
+    ----------
+    parquet_path : str, optional
+        Path to parquet file. Defaults to TRAIN_PATH.
+    leakage_patterns : list, optional
+        Patterns to check. Defaults to common leakage sources.
+    
+    Returns
+    -------
+    dict with:
+        - all_cols: all column names in schema
+        - leakers: columns matching patterns but not in EXCLUDE_ALWAYS
+        - csv_rows: ready-to-paste CSV rows for column_exclusions.csv
+    """
+    import pyarrow.parquet as pq
+    
+    if parquet_path is None:
+        parquet_path = TRAIN_PATH
+    
+    if leakage_patterns is None:
+        leakage_patterns = [
+            'claim', 'ee_', 'incurred', 'incloss', 'pp_',
+            'loss', 'paid', 'reserve', 'premium'
+        ]
+    
+    # REFRESH exclusions (re-read CSV to pick up new additions)
+    current_exclusions = list(_ALL_TARGETS | _load_exclusion_list())
+    
+    # Read schema only (FAST - no data loaded!)
+    schema = pq.read_schema(parquet_path)
+    column_names = schema.names
+    
+    # Find suspicious columns
+    suspicious = []
+    by_pattern = {}
+    for col in column_names:
+        col_lower = col.lower()
+        for pattern in leakage_patterns:
+            if col_lower.startswith(pattern):
+                suspicious.append((col, pattern))
+                by_pattern.setdefault(pattern, []).append(col)
+                break
+    
+    # Identify leakers (not already excluded) - use refreshed list
+    leakers = [col for col, _ in suspicious if col not in current_exclusions]
+    
+    # Generate CSV rows ready to paste
+    csv_rows = [f"{col},data_leakage,leakage" for col in sorted(leakers)]
+    
+    # Report
+    print("\n" + "="*70)
+    print("🔍 PARQUET SCHEMA SCAN (Fast - No Data Loaded)")
+    print("="*70)
+    print(f"File: {parquet_path}")
+    print(f"Total columns: {len(column_names)}")
+    print(f"Suspicious columns: {len(suspicious)}")
+    
+    if suspicious:
+        print("\nBreakdown by pattern:")
+        for pattern in sorted(by_pattern.keys()):
+            cols = by_pattern[pattern]
+            excluded_count = sum(1 for c in cols if c in current_exclusions)
+            leaker_count = len(cols) - excluded_count
+            status = "✅" if leaker_count == 0 else "⚠️"
+            print(f"  {status} '{pattern}*': {len(cols)} found "
+                  f"({excluded_count} excluded, {leaker_count} leaking)")
+    
+    if leakers:
+        print(f"\n🚨 Found {len(leakers)} LEAKAGE features to add:")
+        print("\n--- COPY BELOW TO column_exclusions.csv ---")
+        for row in csv_rows:
+            print(row)
+        print("--- END ---")
+        print("\nAfter updating CSV, re-run this cell to verify exclusions.")
+    else:
+        print(f"\n✅ All suspicious columns are excluded - ready to load data!")
+    
+    print("="*70 + "\n")
+    
+    return {
+        'all_cols': column_names,
+        'leakers': leakers,
+        'csv_rows': csv_rows,
+        'by_pattern': by_pattern
+    }
+
+
+def scan_for_leakage_features(df: pd.DataFrame, 
+                               leakage_patterns: list = None) -> dict:
+    """
+    Scan dataset for potential data leakage features at start of every run.
+    
+    Checks for columns starting with suspicious patterns that could reveal
+    claim occurrence or amounts (e.g., claim_count*, incloss*, incurred*).
+    
+    Note: Target columns (pp_bi, ee_bi, etc.) are already in EXCLUDE_ALWAYS
+    via _ALL_TARGETS, so they won't be flagged as leakers.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Raw data to scan
+    leakage_patterns : list, optional
+        Custom patterns to check. Default covers common leakage sources.
+    
+    Returns
+    -------
+    dict with keys:
+        - found: list of (column, pattern) tuples for all matches
+        - leakers: list of columns that match patterns but aren't excluded
+        - by_pattern: dict grouping columns by matched pattern
+    """
+    if leakage_patterns is None:
+        # PRIMARY patterns (almost always leakage)
+        leakage_patterns = [
+            'claim', 'ee_', 'incurred', 'incloss', 'pp_',
+            # SECONDARY patterns (context-dependent)
+            'loss', 'paid', 'reserve', 'premium'
+        ]
+    
+    # Find all columns matching patterns
+    suspicious = []
+    for col in df.columns:
+        col_lower = col.lower()
+        for pattern in leakage_patterns:
+            if col_lower.startswith(pattern):
+                suspicious.append((col, pattern))
+                break
+    
+    # Group by pattern for reporting
+    by_pattern = {}
+    for col, pattern in suspicious:
+        by_pattern.setdefault(pattern, []).append(col)
+    
+    # Identify TRUE leakers (not already excluded)
+    leakers = [col for col, _ in suspicious if col not in EXCLUDE_ALWAYS]
+    
+    # Print report
+    print("\n" + "="*70)
+    print("🔍 LEAKAGE FEATURE SCAN")
+    print("="*70)
+    print(f"Total suspicious columns: {len(suspicious)}")
+    
+    if suspicious:
+        print("\nBreakdown by pattern:")
+        for pattern in sorted(by_pattern.keys()):
+            cols = by_pattern[pattern]
+            excluded_count = sum(1 for c in cols if c in EXCLUDE_ALWAYS)
+            leaker_count = len(cols) - excluded_count
+            status = "✅" if leaker_count == 0 else "⚠️"
+            print(f"  {status} '{pattern}*': {len(cols)} found "
+                  f"({excluded_count} excluded, {leaker_count} leaking)")
+    
+    if leakers:
+        print(f"\n🚨 CRITICAL: Found {len(leakers)} potential LEAKAGE features:")
+        for col in sorted(leakers):
+            print(f"     - {col}")
+        print(f"\n💡 ACTION REQUIRED: Add these to config/column_exclusions.csv")
+        print("   Then re-run training to prevent data leakage!")
+    else:
+        print(f"\n✅ All suspicious columns are properly excluded.")
+    
+    print("="*70 + "\n")
+    
+    return {
+        'found': suspicious,
+        'leakers': leakers,
+        'by_pattern': by_pattern
+    }
+
+
+def _check_cardinality_safety(col_name: str, series: pd.Series, 
+                               max_unique: int = 100) -> bool:
+    """
+    Check if a column is safe for One-Hot Encoding.
+    
+    Columns with >max_unique values create massive sparse matrices on large datasets
+    (e.g., 1.28M rows × 500 categories = 640M cells) that can freeze/crash the kernel.
+    
+    Parameters
+    ----------
+    col_name : str
+        Name of the column being checked
+    series : pd.Series
+        The column data to check
+    max_unique : int, default 100
+        Maximum number of unique values allowed for OHE
+    
+    Returns
+    -------
+    bool
+        True if safe to encode (n_unique <= max_unique), False otherwise
+    """
+    n_unique = series.nunique()
+    if n_unique > max_unique:
+        sample_vals = list(series.dropna().unique()[:5])
+        print(f"  ⚠️  SKIPPING '{col_name}': {n_unique:,} unique values "
+              f"(exceeds {max_unique} OHE limit)")
+        print(f"      Sample: {sample_vals}")
+        print(f"      → Add to config/column_exclusions.csv to permanently exclude")
+        return False
+    return True
+
+
 # ============================================================================
 # 3. Low-level encoders
 # ============================================================================
@@ -306,6 +654,13 @@ def encode_type1_ordinal(train: pd.DataFrame, test: pd.DataFrame = None):
     ohe_parts_tr, ohe_names = [], []
     encoders = {}
     for col in obj_cols:
+        n_unique = train[col].nunique()
+        print(f"     Processing OHE: '{col}' ({n_unique} unique values)")
+        
+        # Check cardinality safety before OHE
+        if not _check_cardinality_safety(col, train[col], max_unique=100):
+            continue  # Skip this high-cardinality column
+        
         enc = _fit_ohe_for_col(col, train[col].astype(str))
         encoders[col] = enc
         ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
@@ -316,7 +671,16 @@ def encode_type1_ordinal(train: pd.DataFrame, test: pd.DataFrame = None):
         X_tr = pd.concat([X_tr] + ohe_parts_tr, axis=1)
         feat_names.extend(ohe_names)
 
-    print(f"     Features: {len(feat_names)}  (numeric ordinal: {len(num_cols)}, OHE string: {len(ohe_names)})")
+    # Apply inclusion filter if whitelist exists
+    inclusion_list = _load_inclusion_list()
+    if inclusion_list is not None:
+        # Keep only whitelisted features
+        included_feats = [f for f in feat_names if f in inclusion_list]
+        X_tr = X_tr[included_feats]
+        feat_names = included_feats
+        print(f"     Features AFTER inclusion filter: {len(feat_names)} (filtered from {len(X_tr.columns)} total)")
+    else:
+        print(f"     Features: {len(feat_names)}  (numeric ordinal: {len(num_cols)}, OHE string: {len(ohe_names)})")
 
     if test is None:
         return X_tr, feat_names, encoders
@@ -369,6 +733,13 @@ def encode_type2_binary(train: pd.DataFrame, test: pd.DataFrame = None):
     # String columns: One-Hot Encode (fit on train)
     ohe_parts_tr, ohe_names = [], []
     for col in obj_cols:
+        n_unique = train[col].nunique()
+        print(f"     Processing OHE: '{col}' ({n_unique} unique values)")
+        
+        # Check cardinality safety before OHE
+        if not _check_cardinality_safety(col, train[col], max_unique=100):
+            continue  # Skip this high-cardinality column
+        
         enc = _fit_ohe_for_col(col, train[col].astype(str))
         encoders[col] = enc
         ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
@@ -380,7 +751,17 @@ def encode_type2_binary(train: pd.DataFrame, test: pd.DataFrame = None):
 
     feat_names = list(X_tr.columns)
     n_binary = sum(_is_0_5_col(train[c]) for c in num_cols)
-    print(f"     Features: {len(feat_names)}  (0-5 binary: {n_binary}, other numeric: {len(num_cols)-n_binary}, OHE string: {len(ohe_names)})")
+    
+    # Apply inclusion filter if whitelist exists
+    inclusion_list = _load_inclusion_list()
+    if inclusion_list is not None:
+        # Keep only whitelisted features
+        included_feats = [f for f in feat_names if f in inclusion_list]
+        X_tr = X_tr[included_feats]
+        feat_names = included_feats
+        print(f"     Features AFTER inclusion filter: {len(feat_names)} (filtered from {len(X_tr.columns)} total)")
+    else:
+        print(f"     Features: {len(feat_names)}  (0-5 binary: {n_binary}, other numeric: {len(num_cols)-n_binary}, OHE string: {len(ohe_names)})")
 
     if test is None:
         return X_tr, feat_names, encoders
@@ -496,7 +877,17 @@ def encode_type3_actuarial(train: pd.DataFrame, test: pd.DataFrame = None):
     encoders["__obj_cols__"]     = obj_cols
 
     X_train = pd.concat(X_tr_parts, axis=1)
-    print(f"     Features: {len(feat_names)}")
+    
+    # Apply inclusion filter if whitelist exists
+    inclusion_list = _load_inclusion_list()
+    if inclusion_list is not None:
+        # Keep only whitelisted features
+        included_feats = [f for f in feat_names if f in inclusion_list]
+        X_train = X_train[included_feats]
+        feat_names = included_feats
+        print(f"     Features AFTER inclusion filter: {len(feat_names)} (filtered from {len(X_train.columns)} total)")
+    else:
+        print(f"     Features: {len(feat_names)}")
 
     if test is None:
         return X_train, feat_names, encoders
@@ -581,6 +972,13 @@ def encode_type4_custom(train: pd.DataFrame, test: pd.DataFrame = None):
     # String columns: One-Hot Encode (fit on train)
     ohe_parts_tr, ohe_names = [], []
     for col in obj_cols:
+        n_unique = train[col].nunique()
+        print(f"     Processing OHE: '{col}' ({n_unique} unique values)")
+        
+        # Check cardinality safety before OHE
+        if not _check_cardinality_safety(col, train[col], max_unique=100):
+            continue  # Skip this high-cardinality column
+        
         enc = _fit_ohe_for_col(col, train[col].astype(str))
         encoders[col] = enc
         ohe_tr = _transform_ohe(col, train[col].astype(str), enc)
@@ -592,7 +990,17 @@ def encode_type4_custom(train: pd.DataFrame, test: pd.DataFrame = None):
 
     feat_names = list(X_tr.columns)
     n_mapped = sum(_is_0_5_col(train[c]) for c in num_cols)
-    print(f"     Features: {len(feat_names)}  (0-5 map2to4+binary: {n_mapped}, other numeric: {len(num_cols)-n_mapped}, OHE string: {len(ohe_names)})")
+    
+    # Apply inclusion filter if whitelist exists
+    inclusion_list = _load_inclusion_list()
+    if inclusion_list is not None:
+        # Keep only whitelisted features
+        included_feats = [f for f in feat_names if f in inclusion_list]
+        X_tr = X_tr[included_feats]
+        feat_names = included_feats
+        print(f"     Features AFTER inclusion filter: {len(feat_names)} (filtered from {len(X_tr.columns)} total)")
+    else:
+        print(f"     Features: {len(feat_names)}  (0-5 map2to4+binary: {n_mapped}, other numeric: {len(num_cols)-n_mapped}, OHE string: {len(ohe_names)})")
 
     if test is None:
         return X_tr, feat_names, encoders

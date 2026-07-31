@@ -1,0 +1,28 @@
+# FEATURE INCLUSION WHITELIST
+# If this file exists, ONLY these features will be used in training
+# To disable: rename to columns_inclusion.csv.disabled
+# To re-enable: rename back to columns_inclusion.csv
+#
+# Current set: TOP 20 FEATURES by importance from Model 1
+#
+column_name,category,importance,notes
+st_raw_x__MI,geography,0.017230,Top feature - Michigan state
+owh_loo_years_cal__29.000000,ownership,0.009586,Length of ownership 29 years
+dml_body_style_raw__Convertible,vehicle,0.009453,Convertible body style
+vc_displacement_raw__4.6,vehicle,0.007507,Engine displacement 4.6L
+pol_tenure_cal__34.000000,policy,0.005857,Policy tenure 34 months
+dml_make_raw__PORSCHE,vehicle,0.005228,Porsche make
+owt_number_of_titling_transactions_raw__8.0,ownership,0.005201,8 title transactions
+cef_ann_mi_grp_raw__0.0,mileage,0.004955,Annual mileage group 0
+multi_pol_yes_cal,policy,0.004755,Multi-policy indicator
+vc_cylinders_raw__8,vehicle,0.004745,8 cylinder engine
+BODY_STYLE_SEGMENT_BODY_TYPE__Basic Sporty (Car),vehicle,0.004559,Sporty car segment
+st_raw_x__MN,geography,0.004208,Minnesota state
+vc_engine_valves_raw__32,vehicle,0.004153,32 valve engine
+veh_count_imps__1,policy,0.004092,1 vehicle count
+vc_displacement_raw__4.0,vehicle,0.004077,Engine displacement 4.0L
+vc_displacement_raw__6.0,vehicle,0.004050,Engine displacement 6.0L
+vc_mild_hybrid_raw,vehicle,0.004010,Mild hybrid indicator
+driver_count_raw__None,policy,0.003765,Missing driver count
+NumMinAcc_raw__None,driver,0.003595,Missing minor accidents
+st_raw_x__NH,geography,0.003544,New Hampshire state

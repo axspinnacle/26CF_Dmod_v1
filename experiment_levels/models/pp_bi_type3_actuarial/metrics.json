@@ -1,9 +1,8 @@
 {
-  "rmse": 1318.913473,
-  "mae": 49.683784,
-  "r2": 0.807381,
-  "training_time_sec": 21.1,
-  "n_train": 9503,
-  "n_test": 1907,
-  "n_features": 528
+  "train_rmse": 2874.110123,
+  "train_mae": 204.314056,
+  "train_r2": 0.026509,
+  "training_time_sec": 86.3,
+  "n_train": 1281335,
+  "n_features": 63
 }

@@ -1,0 +1,99 @@
+# FEATURE INCLUSION WHITELIST - 0-5 ORDINAL FEATURES ONLY
+# Experiment: Compare encoding strategies (Type 1-4) using ONLY 0-5 level features
+# This isolates the encoding effect from other feature types
+#
+# To disable: rename to columns_inclusion.csv.disabled
+# To re-enable: rename back to columns_inclusion.csv
+# Backup of previous version: config/backups/columns_inclusion_top20_backup.csv
+#
+column_name,category,range,notes
+NumMajViol_raw,driver,0-3,Major violations count
+NumMajinAcc_raw,driver,0-1,Major accidents count
+NumMinAcc_raw,driver,0-2,Minor accidents count
+NumMinViol_raw,driver,0-3,Minor violations count
+NumSpdViol_raw,driver,0-1,Speed violations count
+late_payments_raw,credit,0-5,Late payment count
+gender_male_ind,driver,0-1,Male indicator
+married_ind,driver,0-1,Married indicator
+multi_pol_unknown_cal,policy,0-1,Multi-policy unknown indicator
+multi_pol_yes_cal,policy,0-1,Multi-policy yes indicator
+driver_has_acc_any_ind,driver,0-1,Has any accident indicator
+driver_has_vio_any_ind,driver,0-1,Has any violation indicator
+owt_comm_ind,ownership,0-1,Commercial ownership indicator
+owt_leasepers_ind,ownership,0-1,Lease/personal indicator
+veh_use_business_ind,vehicle,0-1,Business use indicator
+veh_use_commute_ind,vehicle,0-1,Commute use indicator
+veh_use_farm_ind,vehicle,0-1,Farm use indicator
+vc_doors_raw,vehicle,2-5,Number of doors
+vc_seating_rows_raw,vehicle,2-3,Number of seating rows
+vc_mild_hybrid_raw,vehicle,0-5,Mild hybrid system level
+vc_luxury_flag_ind,vehicle,0-1,Luxury vehicle indicator
+vc_aspiration_forced_induction_ind,vehicle,0-1,Forced induction indicator
+vc_engine_type_hybrid_electric_ind,vehicle,0-1,Hybrid electric indicator
+vc_drive_type_awd_ind,vehicle,0-1,AWD indicator
+vc_drive_type_fwd_ind,vehicle,0-1,FWD indicator
+vc_drive_type_rwd_ind,vehicle,0-1,RWD indicator
+vc_transmission_type_automatic_ind,vehicle,0-1,Automatic transmission indicator
+vc_transmission_type_manual_ind,vehicle,0-1,Manual transmission indicator
+vc_active_collision_avoidance_system_raw,safety,0-5,Active collision avoidance level
+vc_active_driving_assistance_raw,safety,0-5,Active driving assistance level
+vc_active_parking_assistance_raw,safety,0-5,Active parking assistance level
+vc_adaptive_cruise_control_raw,safety,0-5,Adaptive cruise control level
+vc_audible_forward_collision_warning_raw,safety,0-5,Audible collision warning level
+vc_auto_dimming_rearview_mirror_raw,comfort,0-5,Auto dimming mirror level
+vc_auto_dimming_side_mirrors_raw,comfort,0-5,Auto dimming side mirrors level
+vc_auto_start_stop_raw,efficiency,0-5,Auto start-stop level
+vc_automatic_emergency_braking_raw,safety,0-5,Auto emergency braking level
+vc_automatic_high_beams_raw,safety,0-5,Auto high beams level
+vc_backup_camera_raw,safety,0-5,Backup camera level
+vc_blind_spot_warning_raw,safety,0-5,Blind spot warning level
+vc_camera_front_raw,safety,0-5,Front camera level
+vc_camera_raw,safety,0-5,Camera system level
+vc_camera_side_raw,safety,0-5,Side camera level
+vc_cross_traffic_warning_raw,safety,0-5,Cross traffic warning level
+vc_daytime_running_lights_raw,safety,0-5,Daytime running lights level
+vc_driver_attention_system_raw,safety,0-5,Driver attention system level
+vc_dvd_player_raw,comfort,0-5,DVD player level
+vc_electronic_4wd_selector_raw,vehicle,0-5,Electronic 4WD selector level
+vc_electronic_braking_system_raw,safety,0-5,Electronic braking system level
+vc_fog_lights_raw,safety,0-5,Fog lights level
+vc_forward_automatic_emergency_braking_raw,safety,0-5,Forward auto emergency braking level
+vc_forward_collision_warning_raw,safety,0-5,Forward collision warning level
+vc_front_parking_sensors_raw,safety,0-5,Front parking sensors level
+vc_headlights_auto_on_off_raw,comfort,0-5,Auto headlights level
+vc_heated_side_mirrors_raw,comfort,0-5,Heated side mirrors level
+vc_heated_steering_wheel_raw,comfort,0-5,Heated steering wheel level
+vc_hill_ascent_assist_raw,safety,0-5,Hill ascent assist level
+vc_lane_departure_warning_raw,safety,0-5,Lane departure warning level
+vc_lane_keeping_assistance_raw,safety,0-5,Lane keeping assistance level
+vc_navigation_touchscreen_raw,comfort,0-5,Navigation touchscreen level
+vc_parking_collision_warning_raw,safety,0-5,Parking collision warning level
+vc_parking_sensors_raw,safety,0-5,Parking sensors level
+vc_passive_collision_avoidance_system_raw,safety,0-5,Passive collision avoidance level
+vc_pedestrian_detection_raw,safety,0-5,Pedestrian detection level
+vc_power_folding_side_mirrors_raw,comfort,0-5,Power folding mirrors level
+vc_power_sunroof_raw,comfort,0-5,Power sunroof level
+vc_premium_audio_raw,comfort,0-5,Premium audio level
+vc_rear_cross_traffic_warning_raw,safety,0-5,Rear cross traffic warning level
+vc_rear_parking_sensors_raw,safety,0-5,Rear parking sensors level
+vc_rear_window_defogger_raw,comfort,0-5,Rear window defogger level
+vc_rear_wiper_raw,comfort,0-5,Rear wiper level
+vc_remote_engine_start_raw,comfort,0-5,Remote engine start level
+vc_satellite_radio_raw,comfort,0-5,Satellite radio level
+vc_side_mirror_turn_signals_raw,safety,0-5,Side mirror turn signals level
+vc_speed_sensitive_volume_raw,comfort,0-5,Speed sensitive volume level
+vc_subwoofer_raw,comfort,0-5,Subwoofer level
+vc_sunroof_raw,comfort,0-5,Sunroof level
+vc_surround_sound_raw,comfort,0-5,Surround sound level
+vc_taillights_led_raw,safety,0-5,LED taillights level
+vc_tinted_windows_raw,comfort,0-5,Tinted windows level
+vc_touch_screen_raw,comfort,0-5,Touch screen level
+vc_variable_power_steering_raw,comfort,0-5,Variable power steering level
+vc_vehicle_immobilizer_raw,safety,0-5,Vehicle immobilizer level
+vc_visual_forward_collision_warning_raw,safety,0-5,Visual collision warning level
+vc_wipers_automatic_raw,comfort,0-5,Automatic wipers level
+cef_first_branded_ind,vehicle_history,0-1,First branded title indicator
+cef_first_cpo_ind,vehicle_history,0-1,First CPO indicator
+cef_first_poten_dam_ind,vehicle_history,0-1,First potential damage indicator
+cef_first_sev_prob_ind,vehicle_history,0-1,First severe problem indicator
+cef_lien_holder_ind,ownership,0-1,Lien holder indicator
